@@ -11,6 +11,7 @@ from . import event
 class IRCEvents:
     def __init__(self):
         self.Connected = event.Event()
+        self.Disconnected = event.Event()
         self.Msg = event.Event()
         self.ChanMsg = event.Event()
         self.PrivMsg = event.Event()
@@ -34,7 +35,8 @@ class Bot:
         self.events = IRCEvents()
         self.messagequeue = deque()
         self.tsocket = socket.socket()
-        if usessl:
+        self.enabled = False
+        if usessl is not None:
             try:
                 import ssl
             except ImportError:
@@ -44,6 +46,7 @@ class Bot:
         self.fsocket = self.tsocket.makefile()
 
     def connect(self):
+        self.enabled = True
         self.tsocket.connect(self.address)
         self.print(self.tsocket)
         self.send("NICK {}".format(self.nick))
@@ -92,10 +95,10 @@ class Bot:
 
     @staticmethod
     def print(message):
-        print("[{}] {}\n".format(datetime.now().replace(microsecond=0), message))
+        print("[{}] {}".format(datetime.now().replace(microsecond=0), message))
 
     def send_manager(self):
-        while True:
+        while self.enabled:
             if len(self.messagequeue) > 0:
                 message = self.messagequeue.pop()
                 self.print(message)
@@ -103,10 +106,12 @@ class Bot:
                     self.tsocket.send(bytes(message + "\r\n", "utf-8"))
                 except OSError:
                     self.print(traceback.format_exc())
+                    self.enabled = False
+                    self.events.Disconnected()
             time.sleep(0.5)
 
     def receive_manager(self):
-        while True:
+        while self.enabled:
             try:
                 data = self.fsocket.readline().rstrip("\r\n")
                 if not data:
@@ -116,6 +121,8 @@ class Bot:
                 self.parse_message(data)
             except OSError:
                 self.print(traceback.print_exc())
+                self.enabled = False
+                self.events.Disconnected()
             time.sleep(0.01)
 
     def parse_message(self, message):
