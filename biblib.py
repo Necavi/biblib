@@ -5,7 +5,7 @@ import traceback
 from datetime import datetime
 from collections import deque
 
-import event
+from . import event
 
 
 class IRCEvents:
